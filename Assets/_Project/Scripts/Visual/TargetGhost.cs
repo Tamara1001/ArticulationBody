@@ -43,6 +43,9 @@ namespace Station.Visual
             foreach (var mf in GetComponentsInChildren<MeshFilter>())
             {
                 if (!mf.TryGetComponent(out MeshRenderer src) || src.sharedMaterial == ghostMaterial) continue;
+                // Las piezas de otro joint hijo (mesa, empujador...) tienen su propio fantasma: si se copiaran aquí
+                // aparecerían dos veces, una en su pose real y otra en la del target (el "desfasado" al girar).
+                if (mf.GetComponentInParent<JointDriveController>() != joint) continue;
                 var go = new GameObject(mf.name + "_g");
                 go.transform.SetParent(ghostRoot, false);
                 go.AddComponent<MeshFilter>().sharedMesh = mf.sharedMesh;

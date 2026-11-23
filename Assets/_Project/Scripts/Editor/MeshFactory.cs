@@ -30,6 +30,13 @@ namespace Station.EditorTools
             return Cached(key, () => BuildPrism(sides, radius, length, axis));
         }
 
+        /// <summary>Cilindro con el lateral suave (normales radiales): no parpadea al girar. axis: 0 = X, 1 = Y, 2 = Z.</summary>
+        public static Mesh Cylinder(int sides, float radius, float length, int axis)
+        {
+            string key = $"Cyl_{sides}_{radius:0.###}_{length:0.###}_a{axis}";
+            return Cached(key, () => BuildCylinder(sides, radius, length, axis));
+        }
+
         public static Mesh Sphere(float radius, int segments = 8)
         {
             string key = $"Sphere_{radius:0.###}_{segments}";
@@ -177,6 +184,38 @@ namespace Station.EditorTools
             bd.Poly(capA, -ax);
             bd.Poly(capB, ax);
             return bd.ToMesh("Prism");
+        }
+
+        private static Mesh BuildCylinder(int sides, float r, float len, int axis)
+        {
+            var bd = new Builder();
+            float hl = len * 0.5f;
+            var capA = new List<Vector3>();
+            var capB = new List<Vector3>();
+            for (int i = 0; i < sides; i++)
+            {
+                float a0 = i * Mathf.PI * 2f / sides, a1 = (i + 1) * Mathf.PI * 2f / sides;
+                Vector3 p0 = AxisVec(a0, r, -hl, axis), p1 = AxisVec(a1, r, -hl, axis);
+                Vector3 q0 = AxisVec(a0, r, hl, axis), q1 = AxisVec(a1, r, hl, axis);
+                Vector3 n0 = AxisVec(a0, 1f, 0f, axis), n1 = AxisVec(a1, 1f, 0f, axis);
+                int s0 = bd.V.Count;
+                bd.V.Add(p0); bd.N.Add(n0);
+                bd.V.Add(q0); bd.N.Add(n0);
+                bd.V.Add(q1); bd.N.Add(n1);
+                bd.V.Add(p1); bd.N.Add(n1);
+                Vector3 avg = (n0 + n1).normalized;
+                foreach (var (a, b, c) in new[] { (0, 1, 2), (0, 2, 3) })
+                {
+                    int ia = s0 + a, ib = s0 + b, ic = s0 + c;
+                    if (Vector3.Dot(Vector3.Cross(bd.V[ib] - bd.V[ia], bd.V[ic] - bd.V[ia]), avg) < 0f) (ib, ic) = (ic, ib);
+                    bd.T.Add(ia); bd.T.Add(ib); bd.T.Add(ic);
+                }
+                capA.Add(p0); capB.Add(q0);
+            }
+            Vector3 ax = Vector3.zero; ax[axis] = 1f;
+            bd.Poly(capA, -ax);
+            bd.Poly(capB, ax);
+            return bd.ToMesh("Cylinder");
         }
 
         private static Mesh BuildSphere(float r, int seg)

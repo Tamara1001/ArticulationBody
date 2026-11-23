@@ -25,7 +25,7 @@ Material:
     m_TexEnvs: []
     m_Ints: []
     m_Floats:
-    - _OutlineScale: 1
+    - _OutlineScale: 0.45
     - _PanelScale: 1
     - _PanelStrength: 0
     - _PanelVariation: 0.04
@@ -37,7 +37,7 @@ Material:
     - _TapeWidth: 0.05
     - _Toon: 0.8
     m_Colors:
-    - _BaseColor: {r: 0.09, g: 0.09, b: 0.1, a: 1}
+    - _BaseColor: {r: 0.24, g: 0.25, b: 0.28, a: 1}
     - _EmissionColor: {r: 0, g: 0, b: 0, a: 1}
     - _StripeColor: {r: 0.079999976, g: 0.079999976, b: 0.089999996, a: 1}
     - _TapeColor: {r: 0.75, g: 0.62, b: 0.41999996, a: 1}

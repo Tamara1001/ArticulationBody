@@ -26,9 +26,9 @@ Material:
     m_Ints: []
     m_Floats:
     - _OutlineScale: 1
-    - _PanelScale: 0.175
-    - _PanelStrength: 0.5
-    - _PanelVariation: 0.03
+    - _PanelScale: 1
+    - _PanelStrength: 0
+    - _PanelVariation: 0.04
     - _RimStrength: 0.2
     - _StripeScale: 6
     - _StripeStrength: 0

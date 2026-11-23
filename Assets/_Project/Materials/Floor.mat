@@ -25,10 +25,10 @@ Material:
     m_TexEnvs: []
     m_Ints: []
     m_Floats:
-    - _OutlineScale: 0
-    - _PanelScale: 1.5
-    - _PanelStrength: 0.7
-    - _PanelVariation: 0.05
+    - _OutlineScale: 1
+    - _PanelScale: 1
+    - _PanelStrength: 0
+    - _PanelVariation: 0.04
     - _RimStrength: 0
     - _StripeScale: 6
     - _StripeStrength: 0

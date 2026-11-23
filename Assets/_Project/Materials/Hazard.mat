@@ -30,8 +30,8 @@ Material:
     - _PanelStrength: 0
     - _PanelVariation: 0.04
     - _RimStrength: 0.2
-    - _StripeScale: 7
-    - _StripeStrength: 1
+    - _StripeScale: 6
+    - _StripeStrength: 0
     - _TapeStrength: 0
     - _TapeTop: 0.1
     - _TapeWidth: 0.05

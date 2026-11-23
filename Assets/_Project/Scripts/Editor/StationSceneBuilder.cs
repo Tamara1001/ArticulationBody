@@ -157,7 +157,7 @@ namespace Station.EditorTools
             Mat("Steel", new Color(0.60f, 0.64f, 0.68f), 0.6f, 0.3f);
             Mat("Yellow", new Color(0.96f, 0.71f, 0.06f));
             Mat("Orange", new Color(0.94f, 0.42f, 0.12f));
-            Mat("Rubber", new Color(0.09f, 0.09f, 0.10f), 0.8f, 0.35f);
+            Mat("Rubber", new Color(0.24f, 0.25f, 0.28f), 0.8f, 0.35f).SetFloat("_OutlineScale", 0.45f); // goma gris oscuro, borde fino (el rodillo es chico)
             Mat("Red", new Color(0.88f, 0.22f, 0.18f));
             Mat("BinLeft", new Color(0.16f, 0.50f, 0.80f));
             Mat("BinRight", new Color(0.82f, 0.28f, 0.20f));
@@ -315,7 +315,7 @@ namespace Station.EditorTools
             var roller = Body("Rodillo", bt, new Vector3(0f, DeckTop + RollerCrest - 0.05f, RollerZ), ArticulationJointType.RevoluteJoint, Quaternion.identity, 4f);
             Revolute(roller, 0f, 0f, true);
             roller.maxAngularVelocity = 60f;
-            Part(roller.transform, "Rodillo_Goma", MeshFactory.Prism(14, 0.05f, 0.52f, 0), Vector3.zero, "Rubber");
+            Part(roller.transform, "Rodillo_Goma", MeshFactory.Cylinder(28, 0.05f, 0.52f, 0), Vector3.zero, "Rubber");
             Part(roller.transform, "Rodillo_Marca", MeshFactory.Box(new Vector3(0.53f, 0.012f, 0.02f), 0.002f), new Vector3(0f, 0.045f, 0f), "Yellow");
             var rollCol = roller.gameObject.AddComponent<CapsuleCollider>();
             rollCol.direction = 0; rollCol.radius = 0.05f; rollCol.height = 0.62f; rollCol.sharedMaterial = pmRubber;
