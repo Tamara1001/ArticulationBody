@@ -89,9 +89,9 @@ namespace Station.Demo
             orbit.ExternalControl = true;
             cursor = new VisualElement { pickingMode = PickingMode.Ignore };
             cursor.style.position = Position.Absolute;
-            cursor.style.width = 28; cursor.style.height = 42;
-            cursor.style.backgroundImage = new StyleBackground(MakeArrow());
-            cursor.style.transformOrigin = new TransformOrigin(2, 2);
+            arrowTex = MakeArrow();
+            handTex = MakeHand();
+            SetShape(false, true);
             PlaceCursor(cursorBase);
             root.Add(cursor);
 
@@ -453,13 +453,89 @@ namespace Station.Demo
         // Micro-temblor continuo, como una mano real sobre el mouse
         private void LateUpdate() { if (cursor != null) ApplyCursor(); }
 
+        private Texture2D arrowTex, handTex;
+        private bool handShape;
+        private static readonly Vector2 ArrowHot = new(2f, 2f), HandHot = new(15f, 3f);
+
+        private void SetShape(bool hand, bool force = false)
+        {
+            if (!force && hand == handShape) return;
+            handShape = hand;
+            var tex = hand ? handTex : arrowTex;
+            Vector2 hot = hand ? HandHot : ArrowHot;
+            cursor.style.width = tex.width; cursor.style.height = tex.height;
+            cursor.style.backgroundImage = new StyleBackground(tex);
+            cursor.style.transformOrigin = new TransformOrigin(hot.x, hot.y);
+        }
+
+        // Como en Windows: mano sobre botones y presets del HUD, flecha en el resto
+        private bool OverClickable(Vector2 p)
+        {
+            var panel = root.panel;
+            if (panel == null) return false;
+            for (var e = panel.Pick(p); e != null; e = e.parent)
+                if (e is Button) return true;
+            return false;
+        }
+
         private void ApplyCursor()
         {
+            SetShape(OverClickable(cursorBase));
+            Vector2 hot = handShape ? HandHot : ArrowHot;
             float t = Time.time;
             float jx = (Mathf.PerlinNoise(t * 2.3f, 0.37f) - 0.5f) * 1.8f;
             float jy = (Mathf.PerlinNoise(0.81f, t * 2.1f) - 0.5f) * 1.8f;
-            cursor.style.left = cursorBase.x + jx - 2f; // la punta de la flecha queda en la posición
-            cursor.style.top = cursorBase.y + jy - 2f;
+            cursor.style.left = cursorBase.x + jx - hot.x; // la punta (o el dedo índice) queda en la posición
+            cursor.style.top = cursorBase.y + jy - hot.y;
+        }
+
+        /// <summary>Mano de enlace de Windows: índice extendido, palma y tres dedos, con borde negro.</summary>
+        private static Texture2D MakeHand()
+        {
+            const int W = 36, H = 44, SS = 4;
+            const float S = 1.75f, Pad = 2f, Stroke = 0.9f;
+            float Seg(Vector2 p, Vector2 a, Vector2 b, float r)
+            {
+                Vector2 ab = b - a;
+                float t = Mathf.Clamp01(Vector2.Dot(p - a, ab) / ab.sqrMagnitude);
+                return Vector2.Distance(p, a + ab * t) - r;
+            }
+            // Distancia con signo (negativa dentro) de la unión de dedos, palma y pulgar, en unidades de diseño
+            float Sdf(Vector2 q)
+            {
+                float d = Seg(q, new(7.4f, 2.4f), new(7.4f, 11f), 1.9f);                  // índice
+                d = Mathf.Min(d, Seg(q, new(11.4f, 8.2f), new(11.4f, 12f), 1.7f));       // medio
+                d = Mathf.Min(d, Seg(q, new(14.6f, 9f), new(14.6f, 12f), 1.6f));         // anular
+                d = Mathf.Min(d, Seg(q, new(17.6f, 10.4f), new(17.6f, 12.5f), 1.5f));    // meñique
+                d = Mathf.Min(d, Seg(q, new(5.6f, 15.5f), new(2.4f, 11.6f), 1.7f));      // pulgar
+                Vector2 c = new(11.6f, 16.2f), h = new(6.3f, 4.6f);                        // palma (caja redondeada)
+                Vector2 e = new Vector2(Mathf.Abs(q.x - c.x), Mathf.Abs(q.y - c.y)) - h;
+                float box = new Vector2(Mathf.Max(e.x, 0f), Mathf.Max(e.y, 0f)).magnitude + Mathf.Min(Mathf.Max(e.x, e.y), 0f) - 1.8f;
+                return Mathf.Min(d, box);
+            }
+
+            var tex = new Texture2D(W, H, TextureFormat.RGBA32, false) { filterMode = FilterMode.Bilinear, wrapMode = TextureWrapMode.Clamp };
+            var px = new Color32[W * H];
+            for (int y = 0; y < H; y++)
+            for (int x = 0; x < W; x++)
+            {
+                int white = 0, black = 0;
+                for (int j = 0; j < SS; j++)
+                for (int i = 0; i < SS; i++)
+                {
+                    var p = new Vector2(x + (i + 0.5f) / SS, H - (y + (j + 0.5f) / SS));
+                    float d = Sdf((p - new Vector2(Pad, Pad)) / S) * S;
+                    if (d > Stroke) continue;
+                    if (d > -Stroke) black++; else white++;
+                }
+                int n = SS * SS, opaque = white + black;
+                byte a = (byte)Mathf.RoundToInt(255f * opaque / n);
+                byte c = opaque > 0 ? (byte)Mathf.RoundToInt(255f * white / opaque) : (byte)0;
+                px[y * W + x] = new Color32(c, c, c, a);
+            }
+            tex.SetPixels32(px);
+            tex.Apply();
+            return tex;
         }
 
         /// <summary>Flecha blanca con borde negro, como el puntero normal de Windows.</summary>
