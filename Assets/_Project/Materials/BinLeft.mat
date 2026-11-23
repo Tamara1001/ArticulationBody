@@ -1,0 +1,45 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!21 &2100000
+Material:
+  serializedVersion: 8
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_Name: BinLeft
+  m_Shader: {fileID: 4800000, guid: b18b4fef661269e4ea09886475cdf07e, type: 3}
+  m_Parent: {fileID: 0}
+  m_ModifiedSerializedProperties: 0
+  m_ValidKeywords: []
+  m_InvalidKeywords: []
+  m_LightmapFlags: 4
+  m_EnableInstancingVariants: 0
+  m_DoubleSidedGI: 0
+  m_CustomRenderQueue: -1
+  stringTagMap: {}
+  disabledShaderPasses: []
+  m_LockedProperties: 
+  m_SavedProperties:
+    serializedVersion: 3
+    m_TexEnvs: []
+    m_Ints: []
+    m_Floats:
+    - _OutlineScale: 1
+    - _PanelScale: 1
+    - _PanelStrength: 0
+    - _PanelVariation: 0.04
+    - _RimStrength: 0.2
+    - _StripeScale: 6
+    - _StripeStrength: 0
+    - _TapeStrength: 0
+    - _TapeTop: 0.1
+    - _TapeWidth: 0.05
+    - _Toon: 0.7
+    m_Colors:
+    - _BaseColor: {r: 0.16, g: 0.5, b: 0.8, a: 1}
+    - _EmissionColor: {r: 0, g: 0, b: 0, a: 1}
+    - _StripeColor: {r: 0.079999976, g: 0.079999976, b: 0.089999996, a: 1}
+    - _TapeColor: {r: 0.75, g: 0.62, b: 0.41999996, a: 1}
+  m_BuildTextureStacks: []
+  m_AllowLocking: 1
