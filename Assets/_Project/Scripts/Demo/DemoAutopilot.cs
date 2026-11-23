@@ -60,6 +60,7 @@ namespace Station.Demo
 
         private IEnumerator Start()
         {
+            UnityEngine.Random.InitState(7); // orden de cajas reproducible
             station = FindFirstObjectByType<StationController>();
             spawner = FindFirstObjectByType<CargoSpawner>();
             tracker = FindFirstObjectByType<TaskTracker>();
@@ -89,8 +90,8 @@ namespace Station.Demo
             orbit.ExternalControl = true;
             cursor = new VisualElement { pickingMode = PickingMode.Ignore };
             cursor.style.position = Position.Absolute;
-            arrowTex = MakeArrow();
-            handTex = MakeHand();
+            arrowTex = LoadCursor("arrow", out arrowHot);
+            handTex = LoadCursor("link", out handHot);
             SetShape(false, true);
             PlaceCursor(cursorBase);
             root.Add(cursor);
@@ -145,6 +146,8 @@ namespace Station.Demo
         }
 
         private readonly Dictionary<CargoBox, BoxInfo> infos = new();
+        private readonly System.Random rng = new(20260523);
+        private float Rand(float a, float b) => a + (float)rng.NextDouble() * (b - a);
         private int spawned;
         private float probeStableSince = -1f, scaleStableSince = -1f, pushTime = -10f, startTime;
         private bool introDone;
@@ -307,7 +310,8 @@ namespace Station.Demo
             return false;
         }
 
-        /// <summary>Sin nada que pulsar: orbita un poco la primera vez y después pasea el cursor por los sensores.</summary>
+        /// <summary>Sin nada que pulsar: orbita un poco la primera vez; después señala la pieza que se mueve,
+        /// pasa por encima de algún botón, mira un sensor o deriva con calma, como alguien que explica.</summary>
         private IEnumerator IdleStep()
         {
             if (!introDone && spawned > 0)
@@ -321,9 +325,61 @@ namespace Station.Demo
                 orbit.ZoomSteps(-2);
                 yield break;
             }
-            // Mira la lectura relevante: palpador mientras mide, balanza cuando la caja está en la mesa
-            int which = BoxAt(Zone.Deck) != null ? 1 : BoxAt(Zone.Stop) != null ? 0 : UnityEngine.Random.Range(0, 3);
-            yield return Hover(UnityEngine.Random.Range(0.35f, 0.7f), SensorTarget(which));
+            CargoBox moving = null;
+            foreach (var b in spawner.Active) if (!b.Resolved) { moving = b; break; }
+            double r = rng.NextDouble();
+            if (moving != null && r < 0.42) yield return FollowBox(moving, Rand(0.9f, 1.7f));
+            else if (r < 0.58) yield return PassOverButton();
+            else
+            {
+                int which = BoxAt(Zone.Deck) != null ? 1 : BoxAt(Zone.Stop) != null ? 0 : rng.Next(0, 3);
+                yield return Drift(SensorTarget(which), Rand(0.7f, 1.3f), Rand(10f, 26f));
+            }
+        }
+
+        private Vector2 BoxOnScreen(CargoBox b)
+        {
+            Vector3 sp = Camera.main.WorldToScreenPoint(b.transform.position);
+            return new Vector2(Mathf.Clamp(sp.x + 24f, 420f, 1500f), Mathf.Clamp(Height - sp.y - 10f, 140f, 940f));
+        }
+
+        /// <summary>Va hasta la caja que se mueve y la acompaña con un poco de retraso, como señalándola.</summary>
+        private IEnumerator FollowBox(CargoBox b, float seconds)
+        {
+            yield return MoveCursor(BoxOnScreen(b), -1f);
+            for (float t = 0f; t < seconds && b != null && b.gameObject.activeInHierarchy; t += Time.deltaTime)
+            {
+                cursorBase = Vector2.Lerp(cursorBase, BoxOnScreen(b), 1f - Mathf.Exp(-5f * Time.deltaTime));
+                ApplyCursor();
+                yield return null;
+            }
+        }
+
+        /// <summary>Cruza un botón del HUD sin pulsarlo (la manito aparece y se va).</summary>
+        private IEnumerator PassOverButton()
+        {
+            var buttons = root.Query<Button>().ToList();
+            var b = buttons[rng.Next(0, buttons.Count)];
+            Rect r = b.worldBound;
+            Vector2 over = new(r.center.x + Rand(-r.width * 0.3f, r.width * 0.3f), r.center.y + Rand(-r.height * 0.2f, r.height * 0.2f));
+            yield return MoveCursor(over, -1f);
+            yield return Wait(Rand(0.08f, 0.3f));
+            yield return MoveCursor(over + new Vector2(Rand(-140f, 140f), Rand(60f, 160f)), -1f);
+        }
+
+        /// <summary>Deriva lenta alrededor de un punto (vaivén en ocho), sin quedarse quieto.</summary>
+        private IEnumerator Drift(Vector2 center, float seconds, float radius)
+        {
+            float phase = Rand(0f, 6.28f), w = Rand(1.4f, 2.6f);
+            Vector2 start = center + new Vector2(Mathf.Cos(phase) * radius, Mathf.Sin(2f * phase) * radius * 0.5f);
+            yield return MoveCursor(start, -1f);
+            for (float t = 0f; t < seconds; t += Time.deltaTime)
+            {
+                float a = phase + t * w;
+                cursorBase = Vector2.Lerp(cursorBase, center + new Vector2(Mathf.Cos(a) * radius, Mathf.Sin(2f * a) * radius * 0.5f), 1f - Mathf.Exp(-6f * Time.deltaTime));
+                ApplyCursor();
+                yield return null;
+            }
         }
 
         private Vector2 SensorTarget(int index)
@@ -331,20 +387,10 @@ namespace Station.Demo
             var rows = root.Query(className: "sensor").ToList();
             if (rows.Count == 0) return new Vector2(1700f, 190f);
             Rect r = rows[Mathf.Clamp(index, 0, rows.Count - 1)].worldBound;
-            return new Vector2(r.center.x + UnityEngine.Random.Range(-60f, 40f), r.center.y + UnityEngine.Random.Range(-10f, 10f));
+            return new Vector2(r.center.x + Rand(-60f, 40f), r.center.y + Rand(-10f, 10f));
         }
 
-        private IEnumerator Hover(float seconds, Vector2 where)
-        {
-            float t0 = Time.time;
-            yield return MoveCursor(where, -1f);
-            while (Time.time - t0 < seconds)
-            {
-                where += new Vector2(UnityEngine.Random.Range(-14f, 14f), UnityEngine.Random.Range(-6f, 6f));
-                yield return MoveCursor(where, UnityEngine.Random.Range(0.28f, 0.5f));
-                yield return Wait(UnityEngine.Random.Range(0.05f, 0.2f));
-            }
-        }
+        private IEnumerator Hover(float seconds, Vector2 where) => Drift(where, seconds, 14f);
 
         // ------------------------------------------------------------------ utilidades de guion
 
@@ -372,10 +418,10 @@ namespace Station.Demo
             if (b == null) { Debug.LogWarning("[Demo] Botón no encontrado: " + prefix); action(); yield break; }
             Rect r = b.worldBound;
             var target = new Vector2(
-                r.center.x + UnityEngine.Random.Range(-r.width * 0.22f, r.width * 0.22f),
-                r.center.y + UnityEngine.Random.Range(-r.height * 0.15f, r.height * 0.15f));
+                r.center.x + Rand(-r.width * 0.38f, r.width * 0.38f),
+                r.center.y + Rand(-r.height * 0.3f, r.height * 0.3f));
             yield return MoveCursor(target, -1f, true);
-            yield return Wait(UnityEngine.Random.Range(0.03f, 0.1f));
+            yield return Wait(rng.NextDouble() < 0.25 ? Rand(0.15f, 0.4f) : Rand(0.03f, 0.1f)); // a veces duda antes de pulsar
             // Pulsación visible: el botón se hunde un instante y el cursor se achica
             b.style.opacity = 0.65f; b.style.translate = new Translate(0, 1);
             cursor.style.scale = new Scale(new Vector2(0.9f, 0.9f));
@@ -384,7 +430,7 @@ namespace Station.Demo
             yield return Wait(0.07f);
             b.style.opacity = StyleKeyword.Null; b.style.translate = StyleKeyword.Null;
             cursor.style.scale = StyleKeyword.Null;
-            yield return Wait(UnityEngine.Random.Range(0.04f, 0.2f));
+            yield return Wait(Rand(0.04f, 0.2f));
         }
 
         private static float Ease(float t) // arranque y frenada suaves, tramo medio rápido
@@ -393,27 +439,37 @@ namespace Station.Demo
             return a / (a + b);
         }
 
-        /// <summary>Movimiento curvo (Bézier con puntos de control desplazados), con frenada, sobrepaso y corrección.</summary>
+        /// <summary>Movimiento curvo (Bézier de curvatura distinta cada vez): a veces rápido y decidido, a veces con
+        /// duda (pausa a mitad de camino); sobrepaso con corrección solo de vez en cuando.</summary>
         private IEnumerator MoveCursor(Vector2 to, float duration, bool overshoot = false)
         {
             Vector2 from = cursorBase;
             float dist = Vector2.Distance(from, to);
             if (dist < 2f) { yield return null; yield break; }
-            Vector2 dir = (to - from) / dist;
-            Vector2 aim = to;
-            bool over = overshoot && dist > 220f;
-            if (over) aim = to + dir * UnityEngine.Random.Range(5f, 12f);
-            if (duration < 0f) duration = Mathf.Clamp(0.2f + dist / 3200f, 0.25f, 0.5f);
-            yield return Curve(from, aim, duration);
-            if (over) yield return Curve(aim, to, 0.1f, 0.02f);
+            Vector2 dir = (to - from) / dist, perp = new(-dir.y, dir.x);
+            if (duration < 0f) duration = Mathf.Clamp(0.2f + dist / 3000f, 0.25f, 0.5f) * Rand(0.8f, 1.5f);
+            bool hesitate = dist > 260f && rng.NextDouble() < 0.2;
+            bool over = overshoot && dist > 160f && rng.NextDouble() < 0.4;
+            Vector2 aim = over ? to + dir * Rand(5f, 16f) : to;
+            float bend = Rand(0.04f, 0.3f);
+            if (hesitate)
+            {
+                Vector2 mid = Vector2.Lerp(from, aim, Rand(0.55f, 0.75f)) + perp * dist * Rand(-0.08f, 0.08f);
+                yield return Curve(from, mid, duration * 0.6f, bend);
+                yield return Wait(Rand(0.08f, 0.22f));
+                yield return Curve(mid, aim, duration * 0.55f, bend * 0.6f);
+            }
+            else yield return Curve(from, aim, duration, bend);
+            if (over) yield return Curve(aim, to, Rand(0.08f, 0.16f), 0.02f);
         }
 
         private IEnumerator Curve(Vector2 from, Vector2 to, float duration, float bend = 0.16f)
         {
             float dist = Vector2.Distance(from, to);
             Vector2 d = (to - from) / Mathf.Max(dist, 1f), perp = new(-d.y, d.x);
-            Vector2 c1 = from + (to - from) * 0.3f + perp * dist * UnityEngine.Random.Range(-bend, bend);
-            Vector2 c2 = from + (to - from) * 0.75f + perp * dist * UnityEngine.Random.Range(-bend, bend) * 0.5f;
+            float sign = rng.NextDouble() < 0.5 ? -1f : 1f;
+            Vector2 c1 = from + (to - from) * Rand(0.2f, 0.4f) + perp * dist * bend * sign * Rand(0.6f, 1.2f);
+            Vector2 c2 = from + (to - from) * Rand(0.65f, 0.85f) + perp * dist * bend * -sign * Rand(0f, 0.5f);
             for (float t = 0f; t < duration; t += Time.deltaTime)
             {
                 float k = Ease(t / duration), u = 1f - k;
@@ -455,14 +511,14 @@ namespace Station.Demo
 
         private Texture2D arrowTex, handTex;
         private bool handShape;
-        private static readonly Vector2 ArrowHot = new(2f, 2f), HandHot = new(15f, 3f);
+        private Vector2 arrowHot, handHot;
 
         private void SetShape(bool hand, bool force = false)
         {
             if (!force && hand == handShape) return;
             handShape = hand;
             var tex = hand ? handTex : arrowTex;
-            Vector2 hot = hand ? HandHot : ArrowHot;
+            Vector2 hot = hand ? handHot : arrowHot;
             cursor.style.width = tex.width; cursor.style.height = tex.height;
             cursor.style.backgroundImage = new StyleBackground(tex);
             cursor.style.transformOrigin = new TransformOrigin(hot.x, hot.y);
@@ -481,118 +537,29 @@ namespace Station.Demo
         private void ApplyCursor()
         {
             SetShape(OverClickable(cursorBase));
-            Vector2 hot = handShape ? HandHot : ArrowHot;
+            Vector2 hot = handShape ? handHot : arrowHot;
             float t = Time.time;
-            float jx = (Mathf.PerlinNoise(t * 2.3f, 0.37f) - 0.5f) * 1.8f;
-            float jy = (Mathf.PerlinNoise(0.81f, t * 2.1f) - 0.5f) * 1.8f;
+            float jx = (Mathf.PerlinNoise(t * 0.9f, 0.37f) - 0.5f) * 4f + (Mathf.PerlinNoise(t * 3f, 5.1f) - 0.5f) * 0.8f;
+            float jy = (Mathf.PerlinNoise(0.81f, t * 0.8f) - 0.5f) * 4f + (Mathf.PerlinNoise(7.7f, t * 3f) - 0.5f) * 0.8f;
             cursor.style.left = cursorBase.x + jx - hot.x; // la punta (o el dedo índice) queda en la posición
             cursor.style.top = cursorBase.y + jy - hot.y;
         }
 
-        /// <summary>Mano de enlace de Windows: índice extendido, palma y tres dedos, con borde negro.</summary>
-        private static Texture2D MakeHand()
+        /// <summary>Cursores reales de Windows (aero_arrow / aero_link) convertidos a PNG de 32 px en Video/cursors
+        /// (carpeta ignorada por Git): filtro Point, sin mipmaps, tamaño nativo y hotspot del .cur.</summary>
+        private static Texture2D LoadCursor(string key, out Vector2 hotspot)
         {
-            const int W = 36, H = 44, SS = 4;
-            const float S = 1.75f, Pad = 2f, Stroke = 0.9f;
-            float Seg(Vector2 p, Vector2 a, Vector2 b, float r)
+            string dir = Path.GetFullPath(Path.Combine(Application.dataPath, "..", "Video", "cursors"));
+            var tex = new Texture2D(2, 2, TextureFormat.RGBA32, false) { wrapMode = TextureWrapMode.Clamp };
+            tex.LoadImage(File.ReadAllBytes(Path.Combine(dir, key + ".png")), false);
+            tex.filterMode = FilterMode.Point;
+            hotspot = Vector2.zero;
+            foreach (var line in File.ReadAllLines(Path.Combine(dir, "hotspots.txt")))
             {
-                Vector2 ab = b - a;
-                float t = Mathf.Clamp01(Vector2.Dot(p - a, ab) / ab.sqrMagnitude);
-                return Vector2.Distance(p, a + ab * t) - r;
+                var parts = line.Split(' ');
+                if (parts.Length == 3 && parts[0] == key) hotspot = new Vector2(float.Parse(parts[1]), float.Parse(parts[2]));
             }
-            // Distancia con signo (negativa dentro) de la unión de dedos, palma y pulgar, en unidades de diseño
-            float Sdf(Vector2 q)
-            {
-                float d = Seg(q, new(7.4f, 2.4f), new(7.4f, 11f), 1.9f);                  // índice
-                d = Mathf.Min(d, Seg(q, new(11.4f, 8.2f), new(11.4f, 12f), 1.7f));       // medio
-                d = Mathf.Min(d, Seg(q, new(14.6f, 9f), new(14.6f, 12f), 1.6f));         // anular
-                d = Mathf.Min(d, Seg(q, new(17.6f, 10.4f), new(17.6f, 12.5f), 1.5f));    // meñique
-                d = Mathf.Min(d, Seg(q, new(5.6f, 15.5f), new(2.4f, 11.6f), 1.7f));      // pulgar
-                Vector2 c = new(11.6f, 16.2f), h = new(6.3f, 4.6f);                        // palma (caja redondeada)
-                Vector2 e = new Vector2(Mathf.Abs(q.x - c.x), Mathf.Abs(q.y - c.y)) - h;
-                float box = new Vector2(Mathf.Max(e.x, 0f), Mathf.Max(e.y, 0f)).magnitude + Mathf.Min(Mathf.Max(e.x, e.y), 0f) - 1.8f;
-                return Mathf.Min(d, box);
-            }
-
-            var tex = new Texture2D(W, H, TextureFormat.RGBA32, false) { filterMode = FilterMode.Bilinear, wrapMode = TextureWrapMode.Clamp };
-            var px = new Color32[W * H];
-            for (int y = 0; y < H; y++)
-            for (int x = 0; x < W; x++)
-            {
-                int white = 0, black = 0;
-                for (int j = 0; j < SS; j++)
-                for (int i = 0; i < SS; i++)
-                {
-                    var p = new Vector2(x + (i + 0.5f) / SS, H - (y + (j + 0.5f) / SS));
-                    float d = Sdf((p - new Vector2(Pad, Pad)) / S) * S;
-                    if (d > Stroke) continue;
-                    if (d > -Stroke) black++; else white++;
-                }
-                int n = SS * SS, opaque = white + black;
-                byte a = (byte)Mathf.RoundToInt(255f * opaque / n);
-                byte c = opaque > 0 ? (byte)Mathf.RoundToInt(255f * white / opaque) : (byte)0;
-                px[y * W + x] = new Color32(c, c, c, a);
-            }
-            tex.SetPixels32(px);
-            tex.Apply();
             return tex;
-        }
-
-        /// <summary>Flecha blanca con borde negro, como el puntero normal de Windows.</summary>
-        private static Texture2D MakeArrow()
-        {
-            const int W = 28, H = 42, SS = 4;
-            const float S = 1.7f, Pad = 2f, Stroke = 1.0f;
-            Vector2[] raw = { new(0, 0), new(0, 16), new(4f, 12.2f), new(6.9f, 19f), new(9.6f, 17.9f), new(6.8f, 11.2f), new(11.6f, 11.2f) };
-            var poly = new Vector2[raw.Length];
-            for (int i = 0; i < raw.Length; i++) poly[i] = raw[i] * S + new Vector2(Pad, Pad);
-
-            var tex = new Texture2D(W, H, TextureFormat.RGBA32, false) { filterMode = FilterMode.Bilinear, wrapMode = TextureWrapMode.Clamp };
-            var px = new Color32[W * H];
-            for (int y = 0; y < H; y++)
-            for (int x = 0; x < W; x++)
-            {
-                int white = 0, black = 0;
-                for (int j = 0; j < SS; j++)
-                for (int i = 0; i < SS; i++)
-                {
-                    // y de textura hacia arriba; el polígono está en coordenadas de pantalla (y hacia abajo)
-                    var p = new Vector2(x + (i + 0.5f) / SS, H - (y + (j + 0.5f) / SS));
-                    bool inside = Inside(poly, p);
-                    float d = EdgeDistance(poly, p);
-                    if (d < Stroke) black++;
-                    else if (inside) white++;
-                }
-                int n = SS * SS, opaque = white + black;
-                byte a = (byte)Mathf.RoundToInt(255f * opaque / n);
-                byte c = opaque > 0 ? (byte)Mathf.RoundToInt(255f * white / opaque) : (byte)0;
-                px[y * W + x] = new Color32(c, c, c, a);
-            }
-            tex.SetPixels32(px);
-            tex.Apply();
-            return tex;
-        }
-
-        private static bool Inside(Vector2[] poly, Vector2 p)
-        {
-            bool inside = false;
-            for (int i = 0, j = poly.Length - 1; i < poly.Length; j = i++)
-                if ((poly[i].y > p.y) != (poly[j].y > p.y) &&
-                    p.x < (poly[j].x - poly[i].x) * (p.y - poly[i].y) / (poly[j].y - poly[i].y) + poly[i].x)
-                    inside = !inside;
-            return inside;
-        }
-
-        private static float EdgeDistance(Vector2[] poly, Vector2 p)
-        {
-            float best = float.MaxValue;
-            for (int i = 0, j = poly.Length - 1; i < poly.Length; j = i++)
-            {
-                Vector2 a = poly[j], b = poly[i], ab = b - a;
-                float t = Mathf.Clamp01(Vector2.Dot(p - a, ab) / ab.sqrMagnitude);
-                best = Mathf.Min(best, Vector2.Distance(p, a + ab * t));
-            }
-            return best;
         }
     }
 }
