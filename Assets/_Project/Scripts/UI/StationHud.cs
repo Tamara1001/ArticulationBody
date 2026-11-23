@@ -340,7 +340,8 @@ namespace Station.UI
             c2.Add(HelpRow("H", "Mostrar / ocultar ayuda"));
             cols.Add(c1); cols.Add(c2);
             help.Add(cols);
-            help.Add(Text("Maniobra: N → Espacio (libera, el palpador mide) → R con carro en Carga y mesa a 0° → leé la balanza → " +
+            help.Add(Text("Maniobra: N (la caja baja y el palpador mide su altura en el tope) → Espacio (libera) → Espacio (retiene) → " +
+                          "R con carro en Carga y mesa a 0° (la caja pasa a la mesa) → R (detiene) → leé la balanza → " +
                           "elevá y girá según la regla → E para empujar → Q para retraer → volvé a Carga. " +
                           "Enclavamiento: el carro y la mesa solo se mueven con el empujador retraído.", "help-steps"));
             var footer = Box("help-footer");
@@ -453,18 +454,22 @@ namespace Station.UI
             {
                 Vector3 p = box.transform.position;
                 bool onDeck = new Vector2(p.x, p.z).magnitude < 0.42f && p.y > 0.75f;
-                if (p.z < -1.15f && Mathf.Abs(p.x) < 0.5f)
+                if (p.z < -1.25f && Mathf.Abs(p.x) < 0.5f)
                 {
                     step = "2";
-                    text = station.Gate.Command > 0.05f ? "La caja espera en el tope. Bajalo con Espacio para que pase bajo el palpador."
-                                                        : "Tope abierto: la caja baja hacia la placa de transferencia.";
+                    var probe = station.HeightProbe;
+                    text = station.Gate.Command < 0.05f ? "Tope abierto: la caja baja hacia el rodillo."
+                         : probe.IsStable ? $"El palpador mide {probe.LiveHeight * 100f:0} cm de altura. Bajá el tope con Espacio para liberar la caja."
+                         : "La caja baja por la rampa y levanta el palpador…";
                 }
                 else if (p.z < -0.42f && Mathf.Abs(p.x) < 0.5f)
                 {
                     step = "3";
                     bool ready = station.Lift.Actual < 0.02f && Mathf.Abs(station.Turntable.Actual) < 2f;
-                    text = ready ? "Anotá la altura del palpador. Subí el tope (Espacio) y poné el rodillo en marcha (R) para pasar la caja a la mesa."
-                                 : "Antes de transferir: carro en Carga (1) y mesa a 0° (→).";
+                    text = !ready ? "Antes de transferir: carro en Carga (1) y mesa a 0° (→)."
+                         : station.Gate.Command < 0.05f ? "Caja sobre el rodillo. Subí el tope (Espacio) y poné el rodillo en marcha (R)."
+                         : station.Roller.Command > 0f ? "Rodillo en marcha: la caja pasa a la mesa…"
+                         : "Caja sobre el rodillo. Ponelo en marcha con R para pasarla a la mesa.";
                 }
                 else if (onDeck)
                 {

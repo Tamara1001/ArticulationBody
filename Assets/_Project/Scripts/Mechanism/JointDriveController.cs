@@ -113,14 +113,18 @@ namespace Station.Mechanism
                     }
                     else
                     {
+                        float prev = actual;
                         actual = pos * Mathf.Rad2Deg;
-                        actualVelocity = vel * Mathf.Rad2Deg;
+                        actualVelocity = (actual - prev) / Time.fixedDeltaTime;
                     }
                 }
                 else
                 {
+                    // Velocidad por diferencia de posición: jointVelocity deja un residuo
+                    // de unos cm/s cuando el drive sostiene carga, aunque el cuerpo esté quieto.
+                    float prev = actual;
                     actual = pos;
-                    actualVelocity = vel;
+                    actualVelocity = (actual - prev) / Time.fixedDeltaTime;
                 }
             }
 

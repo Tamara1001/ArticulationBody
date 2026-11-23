@@ -28,6 +28,7 @@ Assets/
       Editor/
         StationSceneBuilder.cs   Construye la escena entera desde código (menú Estación)
         MeshFactory.cs           Mallas low-poly (cajas biseladas, prismas) con normales para outline
+        WebGLBuilder.cs          Build WebGL para itch.io (menú Estación ▸ Build WebGL → Builds/WebGL)
     Shaders/
       IndustrialToon.shader      Toon/flat + líneas de panel + rayas de peligro + outline (casco invertido)
       TargetGhost.shader         Transparente con fresnel para el fantasma
