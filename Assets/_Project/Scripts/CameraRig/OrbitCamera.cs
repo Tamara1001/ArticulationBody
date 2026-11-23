@@ -41,6 +41,24 @@ namespace Station.CameraRig
 
         public string CurrentViewName => views[viewIndex].name;
         public int ViewCount => views.Length;
+        public int ViewIndex => viewIndex;
+
+        /// <summary>Si es true, la cámara ignora el mouse real (la maneja un script, p. ej. la demo grabada).</summary>
+        public bool ExternalControl;
+
+        /// <summary>Gira la órbita como si se arrastrara el mouse esa cantidad de píxeles.</summary>
+        public void Nudge(float dxPixels, float dyPixels)
+        {
+            goalYaw += dxPixels * orbitSpeed;
+            goalPitch = Mathf.Clamp(goalPitch - dyPixels * orbitSpeed, pitchRange.x, pitchRange.y);
+        }
+
+        /// <summary>Zoom en "clics de rueda": positivo acerca, negativo aleja.</summary>
+        public void ZoomSteps(int steps)
+        {
+            for (int i = 0; i < Mathf.Abs(steps); i++)
+                goalDistance = Mathf.Clamp(goalDistance * (1f - Mathf.Sign(steps) * zoomStep), distanceRange.x, distanceRange.y);
+        }
 
         private void Start()
         {
@@ -60,7 +78,7 @@ namespace Station.CameraRig
         private void LateUpdate()
         {
             var mouse = Mouse.current;
-            if (mouse != null)
+            if (mouse != null && !ExternalControl)
             {
                 Vector2 pos = mouse.position.ReadValue();
                 bool overUI = IsPointerOverUI != null && IsPointerOverUI(pos);
