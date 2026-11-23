@@ -47,7 +47,7 @@ Llegan cajas de cartón (`Rigidbody`) que por fuera se ven iguales pero tienen d
 
 ## Documentación
 
-- [Docs/ENTREGA.md](Docs/ENTREGA.md): documento de entrega (diagrama del árbol, explicación y valores de los drives). También en [PDF](Docs/ENTREGA.pdf).
+- [Docs/ENTREGA.pdf](Docs/ENTREGA.pdf): documento de entrega con el formato de la cátedra (editable en [DOCX](Docs/ENTREGA.docx); versión en texto: [ENTREGA.md](Docs/ENTREGA.md)).
 - [Docs/DESIGN_AND_JOINTS.md](Docs/DESIGN_AND_JOINTS.md): diseño del mecanismo, tabla de joints y fuente de los valores.
 - [Docs/arbol_articulacion.svg](Docs/arbol_articulacion.svg): diagrama del árbol.
 - [Docs/STRUCTURE.md](Docs/STRUCTURE.md): estructura del proyecto.
