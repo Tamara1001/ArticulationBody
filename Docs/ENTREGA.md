@@ -63,11 +63,11 @@ Criterio general: la **constante elástica** según el error estático admisible
 - **Carro:** masa suspendida = 25 + 12 + 3 + 1.5 + 20 (caja máx.) = 61.5 kg → ≈ 603 N. Con k = 150 000 N/m el hundimiento estático es ≈ 4 mm. Damping crítico = 2·√(150 000·61.5) ≈ 6 075 → 6 000. forceLimit 3 000 N (≈ 5× el peso). Rampa 0.35 m/s.
 - **Mesa:** inercia en Y ≈ 1 + 0.5 + 0.8 ≈ 2.3 kg·m². Con k = 300 N·m/rad, ω ≈ 11 rad/s; d = 2·√(300·2.3) ≈ 52 → 60. Rampa de 45 °/s para que la aceleración tangencial quede muy por debajo de μ·g y la caja no deslice.
 - **Empujador:** vence la fricción de la caja más pesada, 0.10·20·9.81 ≈ 20 N, más la inercia. k = 20 000 N/m, d = 800, forceLimit 800 N. Rampa 0.45 m/s.
-- **Tope:** resiste la componente de la caja sobre la rampa de 7° (≈ 24 N, lateral). Rigidez moderada; rampa 0.4 m/s.
+- **Tope:** es el cuerpo más liviano (1.5 kg) y solo retiene cajas sobre la rampa de 7°. Carga lateral máxima 20·9.81·sen 7° ≈ 24 N; fricción vertical de la caja contra el perno (μ 0.4) ≈ 10 N. Con k = 5 000 N/m un error de 1 cm genera 50 N; d = 150 es cercano al crítico (2·√(5000·1.5) ≈ 173, ζ ≈ 0.87). forceLimit 300 N, unas 12× la carga lateral. Rampa 0.4 m/s.
 - **Rodillo:** drive de velocidad pura (stiffness 0). Con damping 20 y marcha en 0 actúa de freno. La tracción alcanza ≈ 0.9·N, sobrada para acelerar la caja a 1.8 m/s.
 - **Palpador y Compuerta:** sin stiffness ni target, solo una `jointFriction` de 0.05 para amortiguar la oscilación.
 
-**Validación:** prueba automatizada con las 4 clases de caja llevadas a su destino 6 de 6 veces seguidas, 0 errores y 0 caídas. La balanza leyó 4.0 / 6.0 / 18.0 / 20.0 kg.
+**Validación:** la maniobra completa se probó repetidas veces en el Editor con las 4 clases de caja y cada una llegó a su destino; `DemoAutopilot` ejecuta la secuencia completa sin intervención. La balanza leyó 4.0 / 6.0 / 18.0 / 20.0 kg.
 
 Detalle completo (posiciones de reposo, geometría, lecciones de las pruebas): [DESIGN_AND_JOINTS.md](DESIGN_AND_JOINTS.md).
 

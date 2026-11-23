@@ -4,12 +4,10 @@ Simulador en Unity de una **estación de clasificación de paquetería** resuelt
 
 Llegan cajas de cartón (`Rigidbody`) que por fuera se ven iguales pero tienen distinta altura (0.20 / 0.40 m) y masa (4 a 20 kg). El operador mide la altura con el palpador, la masa con la balanza del elevador, y lleva cada caja a uno de 4 destinos (2 lados × 2 niveles). El fantasma cian muestra el *target* de cada joint; la pieza real lo sigue.
 
-<!-- Agregar capturas de pantalla en Docs/ y enlazarlas acá -->
-
 ## Enlaces
 
-- Build jugable (itch.io): <!-- LINK itch.io -->
-- Video (YouTube): <!-- LINK YouTube -->
+- Build jugable (itch.io): **[COMPLETAR: link de itch.io]** <!-- LINK itch.io -->
+- Video (YouTube): **[COMPLETAR: link de YouTube]** <!-- LINK YouTube -->
 
 ## Controles
 
