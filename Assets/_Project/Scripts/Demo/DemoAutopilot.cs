@@ -37,7 +37,6 @@ namespace Station.Demo
         private int frame;
         private bool finished;
         private readonly List<Task> writes = new();
-        private Vector2 cursorPos = new(1100f, 620f);
 
         // ------------------------------------------------------------------ arranque
 
@@ -93,7 +92,7 @@ namespace Station.Demo
             cursor.style.width = 28; cursor.style.height = 42;
             cursor.style.backgroundImage = new StyleBackground(MakeArrow());
             cursor.style.transformOrigin = new TransformOrigin(2, 2);
-            PlaceCursor(cursorPos);
+            PlaceCursor(cursorBase);
             root.Add(cursor);
 
             Time.captureFramerate = Fps;
@@ -139,91 +138,212 @@ namespace Station.Demo
 
         // ------------------------------------------------------------------ guion
 
-        private IEnumerator Script()
+        private class BoxInfo
         {
-            // Ayuda inicial a la vista unos segundos, con el cursor quieto
-            yield return Wait(4f);
-            yield return Click("Comenzar", () => root.Q(className: "overlay").RemoveFromClassList("overlay--on"));
-            yield return Wait(1f);
-
-            // Un poco de órbita y zoom de cámara con el mouse
-            yield return MoveCursor(new Vector2(930f, 700f), 0.8f);
-            yield return Drag(new Vector2(150f, -30f), 1.6f);
-            yield return Wait(0.4f);
-            yield return Drag(new Vector2(-150f, 30f), 1.6f);
-            yield return Zoom(3);
-            yield return Zoom(-3);
-            yield return Wait(0.5f);
-
-            for (int n = 0; n < 4; n++)
-                yield return SortOneBox(n);
-
-            // Prueba en seco: sin drives el mecanismo cae por gravedad hasta sus límites
-            yield return Wait(1f);
-            yield return Click("Nivel 2", () => station.Lift.SetCommand(station.Lift.MaxValue));
-            yield return Click("Izquierda", () => station.Turntable.SetCommand(180f));
-            yield return WaitUntil(() => Settled(station.Lift) && Settled(station.Turntable), 12f);
-            yield return Click("Empujar", () => station.Pusher.SetCommand(station.Pusher.MaxValue));
-            yield return Wait(3f);
-            yield return Click("Prueba en seco", () => station.SetDryRun(true));
-            yield return Wait(7f);
-            yield return Click("Prueba en seco", () => station.SetDryRun(false));
-            yield return Wait(2f);
-            yield return Click("Retraer", () => station.Pusher.SetCommand(0f));
-            yield return WaitUntil(() => station.PusherRetracted, 8f);
-            yield return Click("Carga", () => station.Lift.SetCommand(0f));
-            yield return Click("Derecha", () => station.Turntable.SetCommand(0f));
-            yield return WaitUntil(() => Settled(station.Lift) && Settled(station.Turntable), 12f);
-            yield return Wait(2.5f);
+            public float Height = -1f, Mass = -1f;
+            public bool Decided;
         }
 
-        private IEnumerator SortOneBox(int index)
+        private readonly Dictionary<CargoBox, BoxInfo> infos = new();
+        private int spawned;
+        private float probeStableSince = -1f, scaleStableSince = -1f, pushTime = -10f, startTime;
+        private bool introDone;
+        private const int TotalBoxes = 4;
+
+        private BoxInfo Info(CargoBox b)
         {
-            CargoBox box = null;
-            yield return Click("Nueva caja", () => box = spawner.Spawn());
-            if (box == null) yield break;
+            if (!infos.TryGetValue(b, out var i)) infos[b] = i = new BoxInfo();
+            return i;
+        }
 
-            // La caja baja por la rampa y levanta el palpador: esperar lectura estable
-            yield return WaitUntil(() => station.HeightProbe.IsStable, 14f);
-            yield return Wait(1.8f);
-            float height = station.HeightProbe.InContact ? station.HeightProbe.LiveHeight : station.HeightProbe.HeldHeight;
+        private int Finished => tracker.Correct + tracker.Wrong + tracker.Dropped;
 
-            // Carro y mesa listos en Carga / 0° antes de recibir la caja
-            yield return WaitUntil(() => Settled(station.Lift) && Settled(station.Turntable), 12f);
+        private IEnumerator Script()
+        {
+            startTime = Time.time;
+            // Ayuda inicial: lectura breve y a operar
+            yield return MoveCursor(new Vector2(1150f, 600f), 0.6f);
+            yield return Wait(1.2f);
+            yield return Click("Comenzar", () => root.Q(className: "overlay").RemoveFromClassList("overlay--on"));
 
-            yield return Click("Bajar", () => station.Gate.SetCommand(0f));
-            yield return WaitUntil(() => InRollerZone(box), 12f);
-            yield return Click("Subir", () => station.Gate.SetCommand(station.Gate.MaxValue));
-            yield return Click("Marcha", () => station.Roller.SetCommand(Station.Controls.StationInput.RollerRun));
-            yield return WaitUntil(() => OnDeck(box), 10f);
-            yield return Click("Paro", () => station.Roller.SetCommand(0f));
+            // Operador: cada vuelta elige la próxima acción lista; si no hay, el cursor pasea por los sensores
+            while ((Finished < TotalBoxes || station.Pusher.Command > 0.05f) && Time.time - startTime < 170f)
+            {
+                var act = NextAction();
+                if (act.HasValue) yield return Click(act.Value.button, act.Value.run);
+                else yield return IdleStep();
+            }
 
-            // Leer la balanza (lectura estable) y decidir según la regla
-            yield return WaitUntil(() => station.LoadCell.IsReady && station.LoadCell.IsStable, 8f);
-            yield return Wait(2f);
-            float mass = station.LoadCell.MassKg;
-            bool level2 = height >= 0.30f;
-            bool left = mass < 10f;
-
-            // Cámara: la primera caja con la vista general; las demás cambian de vista con el botón
-            int wantView = box.Kind == CargoKind.LowHeavy ? 3 : index == 1 ? 2 : index == 3 ? 1 : 0;
-            yield return ViewTo(wantView);
-
-            yield return Click(level2 ? "Nivel 2" : "Nivel 1", () => station.Lift.SetCommand(level2 ? Station.Controls.StationInput.Level2 : Station.Controls.StationInput.Level1));
-            yield return Click(left ? "Izquierda" : "Derecha", () => station.Turntable.SetCommand(left ? 180f : 0f));
-            yield return WaitUntil(() => Settled(station.Lift) && Settled(station.Turntable), 14f);
-            yield return Wait(0.6f);
-
-            yield return Click("Empujar", () => station.Pusher.SetCommand(station.Pusher.MaxValue));
-            yield return Wait(2.5f);
-            yield return Click("Retraer", () => station.Pusher.SetCommand(0f));
-            yield return WaitUntil(() => station.PusherRetracted, 8f);
+            // Prueba en seco: sin drives el mecanismo cae por gravedad hasta sus límites
+            yield return Click("Nivel 2", () => station.Lift.SetCommand(station.Lift.MaxValue));
+            yield return Click("Izquierda", () => station.Turntable.SetCommand(180f));
+            yield return Wait(1.3f);
+            yield return Click("Prueba en seco", () => station.SetDryRun(true));
+            yield return Hover(3.8f, SensorTarget(2));
+            yield return Click("Prueba en seco", () => station.SetDryRun(false));
             yield return Click("Carga", () => station.Lift.SetCommand(0f));
             yield return Click("Derecha", () => station.Turntable.SetCommand(0f));
-            yield return WaitUntil(() => box.Resolved, 12f);
-            yield return Wait(box.Kind == CargoKind.LowHeavy ? 3.5f : 1.5f); // se ve la compuerta pasiva abrirse
-            yield return ViewTo(0);
-            yield return WaitUntil(() => Settled(station.Lift) && Settled(station.Turntable), 12f);
+            yield return Hover(2.5f, SensorTarget(0));
+        }
+
+        private struct Act
+        {
+            public string button;
+            public Action run;
+        }
+
+        // Sigue los sensores cada cuadro (lecturas estables y tiempos de observación)
+        private void Update()
+        {
+            if (station == null || spawner == null) return;
+            CargoBox stop = BoxAt(Zone.Stop), deck = BoxAt(Zone.Deck);
+
+            if (stop != null && station.HeightProbe.IsStable)
+            {
+                if (probeStableSince < 0f) probeStableSince = Time.time;
+                Info(stop).Height = station.HeightProbe.HeldHeight;
+            }
+            else probeStableSince = -1f;
+
+            bool scaleOk = deck != null && station.Roller.Command == 0f && station.LoadCell.IsReady && station.LoadCell.IsStable;
+            if (scaleOk)
+            {
+                if (scaleStableSince < 0f) scaleStableSince = Time.time;
+                Info(deck).Mass = station.LoadCell.MassKg;
+            }
+            else scaleStableSince = -1f;
+        }
+
+        private enum Zone { Stop, Roller, Deck }
+
+        private CargoBox BoxAt(Zone zone)
+        {
+            foreach (var b in spawner.Active)
+            {
+                if (b.Resolved) continue;
+                Vector3 p = b.transform.position;
+                bool hit = zone switch
+                {
+                    Zone.Stop => p.z < -1.25f && Mathf.Abs(p.x) < 0.5f && p.y > 0.6f,
+                    Zone.Roller => p.z > -1.15f && p.z < -0.45f && Mathf.Abs(p.x) < 0.5f && p.y > 0.6f,
+                    _ => new Vector2(p.x, p.z).magnitude < 0.3f && p.y > 0.75f
+                };
+                if (hit) return b;
+            }
+            return null;
+        }
+
+        private Act? NextAction()
+        {
+            CargoBox stop = BoxAt(Zone.Stop), roller = BoxAt(Zone.Roller), deck = BoxAt(Zone.Deck);
+            bool pusherOut = station.Pusher.Command > 0.05f;
+            bool home = station.Lift.Command < 0.02f && Mathf.Abs(station.Turntable.Command) < 2f && Settled(station.Lift) && Settled(station.Turntable);
+            bool gateOpen = station.Gate.Command < 0.05f;
+
+            // 1) Retraer el empujador cuando la caja ya salió
+            if (pusherOut && Time.time - pushTime > 2.3f)
+                return new Act { button = "Retraer", run = () => station.Pusher.SetCommand(0f) };
+
+            // 2) Subir el tope en cuanto la caja pasó
+            if (gateOpen && roller != null)
+                return new Act { button = "Subir", run = () => station.Gate.SetCommand(station.Gate.MaxValue) };
+
+            // 3) Detener el rodillo con la caja ya en la mesa
+            if (deck != null && station.Roller.Command != 0f)
+                return new Act { button = "Paro", run = () => station.Roller.SetCommand(0f) };
+
+            // 3b) Vista de salidas para ver abrirse la compuerta pasiva con la caja baja pesada
+            if (deck != null && deck.Kind == CargoKind.LowHeavy && orbit.ViewIndex != 3 && !pusherOut)
+                return new Act { button = "Vista", run = () => orbit.CycleView() };
+
+            // 4) Volver a Carga / 0° con la mesa vacía y el empujador retraído
+            if (!pusherOut && station.PusherRetracted && deck == null)
+            {
+                if (station.Lift.Command > 0.02f)
+                    return new Act { button = "Carga", run = () => station.Lift.SetCommand(0f) };
+                if (Mathf.Abs(station.Turntable.Command) > 2f)
+                    return new Act { button = "Derecha", run = () => station.Turntable.SetCommand(0f) };
+            }
+
+            // 5) Pasar la caja del rodillo a la mesa
+            if (roller != null && !gateOpen && station.Roller.Command == 0f && deck == null && home && station.PusherRetracted)
+                return new Act { button = "Marcha", run = () => station.Roller.SetCommand(Station.Controls.StationInput.RollerRun) };
+
+            // 6) Clasificar la caja de la mesa según la regla (balanza estable ~1,2 s)
+            if (deck != null && station.Roller.Command == 0f && (Info(deck).Decided || (scaleStableSince >= 0f && Time.time - scaleStableSince > 0.9f)))
+            {
+                var info = Info(deck);
+                info.Decided = true; // la decisión sigue en pie aunque la balanza se agite al mover el carro
+                bool level2 = info.Height >= 0.30f, left = info.Mass < 10f;
+                float wantLift = level2 ? Station.Controls.StationInput.Level2 : Station.Controls.StationInput.Level1;
+                float wantAngle = left ? 180f : 0f;
+                if (station.PusherRetracted && Mathf.Abs(station.Lift.Command - wantLift) > 0.01f)
+                    return new Act { button = level2 ? "Nivel 2" : "Nivel 1", run = () => station.Lift.SetCommand(wantLift) };
+                if (station.PusherRetracted && Mathf.Abs(station.Turntable.Command - wantAngle) > 1f)
+                    return new Act { button = left ? "Izquierda" : "Derecha", run = () => station.Turntable.SetCommand(wantAngle) };
+                if (!pusherOut && Settled(station.Lift) && Settled(station.Turntable))
+                    return new Act { button = "Empujar", run = () => { station.Pusher.SetCommand(station.Pusher.MaxValue); pushTime = Time.time; } };
+            }
+
+            // 7) Pedir la próxima caja apenas la anterior dejó la admisión
+            if (spawned < TotalBoxes && spawner.CanSpawn(out _))
+                return new Act { button = "Nueva caja", run = () => { if (spawner.Spawn() != null) spawned++; } };
+
+            // 8) Liberar el tope cuando el palpador ya dio su lectura y el rodillo está libre
+            if (stop != null && !gateOpen && roller == null && probeStableSince >= 0f && Time.time - probeStableSince > 1.0f)
+                return new Act { button = "Bajar", run = () => station.Gate.SetCommand(0f) };
+
+            bool lowHeavyOnDeck = deck != null && deck.Kind == CargoKind.LowHeavy;
+            if (!lowHeavyOnDeck && orbit.ViewIndex != 0 && !LowHeavyInFlight() && deck == null)
+                return new Act { button = "Vista", run = () => orbit.CycleView() };
+
+            return null;
+        }
+
+        private bool LowHeavyInFlight()
+        {
+            foreach (var b in spawner.Active)
+                if (!b.Resolved && b.Kind == CargoKind.LowHeavy && b.transform.position.y > 0.5f && b.transform.position.z > -0.45f) return true;
+            return false;
+        }
+
+        /// <summary>Sin nada que pulsar: orbita un poco la primera vez y después pasea el cursor por los sensores.</summary>
+        private IEnumerator IdleStep()
+        {
+            if (!introDone && spawned > 0)
+            {
+                introDone = true;
+                yield return MoveCursor(new Vector2(930f, 700f), -1f);
+                yield return Drag(new Vector2(130f, -26f), 0.9f);
+                yield return Drag(new Vector2(-130f, 26f), 0.9f);
+                orbit.ZoomSteps(2);
+                yield return Wait(0.35f);
+                orbit.ZoomSteps(-2);
+                yield break;
+            }
+            // Mira la lectura relevante: palpador mientras mide, balanza cuando la caja está en la mesa
+            int which = BoxAt(Zone.Deck) != null ? 1 : BoxAt(Zone.Stop) != null ? 0 : UnityEngine.Random.Range(0, 3);
+            yield return Hover(UnityEngine.Random.Range(0.35f, 0.7f), SensorTarget(which));
+        }
+
+        private Vector2 SensorTarget(int index)
+        {
+            var rows = root.Query(className: "sensor").ToList();
+            if (rows.Count == 0) return new Vector2(1700f, 190f);
+            Rect r = rows[Mathf.Clamp(index, 0, rows.Count - 1)].worldBound;
+            return new Vector2(r.center.x + UnityEngine.Random.Range(-60f, 40f), r.center.y + UnityEngine.Random.Range(-10f, 10f));
+        }
+
+        private IEnumerator Hover(float seconds, Vector2 where)
+        {
+            float t0 = Time.time;
+            yield return MoveCursor(where, -1f);
+            while (Time.time - t0 < seconds)
+            {
+                where += new Vector2(UnityEngine.Random.Range(-14f, 14f), UnityEngine.Random.Range(-6f, 6f));
+                yield return MoveCursor(where, UnityEngine.Random.Range(0.28f, 0.5f));
+                yield return Wait(UnityEngine.Random.Range(0.05f, 0.2f));
+            }
         }
 
         // ------------------------------------------------------------------ utilidades de guion
@@ -231,35 +351,10 @@ namespace Station.Demo
         private static bool Settled(JointDriveController j) =>
             Mathf.Abs(j.Actual - j.Command) < (j.Unit == "°" ? 1.5f : 0.012f);
 
-        private static bool InRollerZone(CargoBox b)
-        {
-            Vector3 p = b.transform.position;
-            return p.z > -1.15f && p.z < -0.45f && Mathf.Abs(p.x) < 0.5f && p.y > 0.6f;
-        }
-
-        private static bool OnDeck(CargoBox b)
-        {
-            Vector3 p = b.transform.position;
-            return new Vector2(p.x, p.z).magnitude < 0.3f && p.y > 0.75f;
-        }
-
         private static IEnumerator Wait(float seconds)
         {
             float t = 0f;
             while (t < seconds) { t += Time.deltaTime; yield return null; }
-        }
-
-        private static IEnumerator WaitUntil(Func<bool> cond, float timeout)
-        {
-            float t = 0f;
-            while (!cond() && t < timeout) { t += Time.deltaTime; yield return null; }
-        }
-
-        private IEnumerator ViewTo(int target)
-        {
-            while (orbit.ViewIndex != target)
-                yield return Click("Vista", () => orbit.CycleView());
-            if (orbit.ViewIndex == target) yield return Wait(0.3f);
         }
 
         // ------------------------------------------------------------------ cursor
@@ -277,33 +372,52 @@ namespace Station.Demo
             if (b == null) { Debug.LogWarning("[Demo] Botón no encontrado: " + prefix); action(); yield break; }
             Rect r = b.worldBound;
             var target = new Vector2(
-                r.center.x + UnityEngine.Random.Range(-r.width * 0.18f, r.width * 0.18f),
-                r.center.y + UnityEngine.Random.Range(-r.height * 0.12f, r.height * 0.12f));
-            yield return MoveCursor(target, -1f);
-            yield return Wait(0.15f);
+                r.center.x + UnityEngine.Random.Range(-r.width * 0.22f, r.width * 0.22f),
+                r.center.y + UnityEngine.Random.Range(-r.height * 0.15f, r.height * 0.15f));
+            yield return MoveCursor(target, -1f, true);
+            yield return Wait(UnityEngine.Random.Range(0.03f, 0.1f));
             // Pulsación visible: el botón se hunde un instante y el cursor se achica
             b.style.opacity = 0.65f; b.style.translate = new Translate(0, 1);
             cursor.style.scale = new Scale(new Vector2(0.9f, 0.9f));
-            yield return Wait(0.12f);
+            yield return Wait(0.09f);
             action();
-            yield return Wait(0.1f);
+            yield return Wait(0.07f);
             b.style.opacity = StyleKeyword.Null; b.style.translate = StyleKeyword.Null;
             cursor.style.scale = StyleKeyword.Null;
-            yield return Wait(0.35f);
+            yield return Wait(UnityEngine.Random.Range(0.04f, 0.2f));
         }
 
-        private IEnumerator MoveCursor(Vector2 to, float duration)
+        private static float Ease(float t) // arranque y frenada suaves, tramo medio rápido
         {
-            Vector2 from = cursorPos;
+            float a = Mathf.Pow(t, 1.7f), b = Mathf.Pow(1f - t, 1.7f);
+            return a / (a + b);
+        }
+
+        /// <summary>Movimiento curvo (Bézier con puntos de control desplazados), con frenada, sobrepaso y corrección.</summary>
+        private IEnumerator MoveCursor(Vector2 to, float duration, bool overshoot = false)
+        {
+            Vector2 from = cursorBase;
             float dist = Vector2.Distance(from, to);
-            if (duration < 0f) duration = Mathf.Clamp(0.35f + dist / 1500f, 0.4f, 1.2f);
-            Vector2 dir = dist > 1f ? (to - from) / dist : Vector2.right;
-            Vector2 perp = new(-dir.y, dir.x);
-            float arc = dist * 0.05f * (UnityEngine.Random.value < 0.5f ? -1f : 1f);
+            if (dist < 2f) { yield return null; yield break; }
+            Vector2 dir = (to - from) / dist;
+            Vector2 aim = to;
+            bool over = overshoot && dist > 220f;
+            if (over) aim = to + dir * UnityEngine.Random.Range(5f, 12f);
+            if (duration < 0f) duration = Mathf.Clamp(0.2f + dist / 3200f, 0.25f, 0.5f);
+            yield return Curve(from, aim, duration);
+            if (over) yield return Curve(aim, to, 0.1f, 0.02f);
+        }
+
+        private IEnumerator Curve(Vector2 from, Vector2 to, float duration, float bend = 0.16f)
+        {
+            float dist = Vector2.Distance(from, to);
+            Vector2 d = (to - from) / Mathf.Max(dist, 1f), perp = new(-d.y, d.x);
+            Vector2 c1 = from + (to - from) * 0.3f + perp * dist * UnityEngine.Random.Range(-bend, bend);
+            Vector2 c2 = from + (to - from) * 0.75f + perp * dist * UnityEngine.Random.Range(-bend, bend) * 0.5f;
             for (float t = 0f; t < duration; t += Time.deltaTime)
             {
-                float k = Mathf.SmoothStep(0f, 1f, t / duration);
-                PlaceCursor(Vector2.Lerp(from, to, k) + perp * (Mathf.Sin(k * Mathf.PI) * arc));
+                float k = Ease(t / duration), u = 1f - k;
+                PlaceCursor(u * u * u * from + 3f * u * u * k * c1 + 3f * u * k * k * c2 + k * k * k * to);
                 yield return null;
             }
             PlaceCursor(to);
@@ -312,12 +426,12 @@ namespace Station.Demo
         /// <summary>Arrastra con el botón pulsado sobre el fondo: el cursor se mueve y la cámara orbita.</summary>
         private IEnumerator Drag(Vector2 delta, float duration)
         {
-            Vector2 from = cursorPos;
+            Vector2 from = cursorBase;
             cursor.style.scale = new Scale(new Vector2(0.92f, 0.92f));
             float prev = 0f;
             for (float t = 0f; t < duration; t += Time.deltaTime)
             {
-                float k = Mathf.SmoothStep(0f, 1f, t / duration);
+                float k = Ease(t / duration);
                 PlaceCursor(from + delta * k);
                 orbit.Nudge(delta.x * (k - prev), delta.y * (k - prev));
                 prev = k;
@@ -328,22 +442,24 @@ namespace Station.Demo
             cursor.style.scale = StyleKeyword.Null;
         }
 
-        private IEnumerator Zoom(int steps)
-        {
-            int dir = steps > 0 ? 1 : -1;
-            for (int i = 0; i < Mathf.Abs(steps); i++)
-            {
-                orbit.ZoomSteps(dir);
-                yield return Wait(0.25f);
-            }
-            yield return Wait(0.5f);
-        }
+        private Vector2 cursorBase = new(1100f, 620f);
 
         private void PlaceCursor(Vector2 p)
         {
-            cursorPos = p;
-            cursor.style.left = p.x - 2f; // la punta de la flecha queda en p
-            cursor.style.top = p.y - 2f;
+            cursorBase = p;
+            ApplyCursor();
+        }
+
+        // Micro-temblor continuo, como una mano real sobre el mouse
+        private void LateUpdate() { if (cursor != null) ApplyCursor(); }
+
+        private void ApplyCursor()
+        {
+            float t = Time.time;
+            float jx = (Mathf.PerlinNoise(t * 2.3f, 0.37f) - 0.5f) * 1.8f;
+            float jy = (Mathf.PerlinNoise(0.81f, t * 2.1f) - 0.5f) * 1.8f;
+            cursor.style.left = cursorBase.x + jx - 2f; // la punta de la flecha queda en la posición
+            cursor.style.top = cursorBase.y + jy - 2f;
         }
 
         /// <summary>Flecha blanca con borde negro, como el puntero normal de Windows.</summary>
