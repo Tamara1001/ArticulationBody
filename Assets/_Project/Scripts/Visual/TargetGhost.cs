@@ -13,7 +13,9 @@ namespace Station.Visual
     public class TargetGhost : MonoBehaviour
     {
         [SerializeField] private Material ghostMaterial;
-        [SerializeField] private float showThreshold = 0.01f; // en unidades del joint (m o °/100)
+        // Diferencia target-real (m, o °/100) desde la cual aparece el fantasma. Con menos, la malla real
+        // y la copia casi coinciden y la superposición tiñe de celeste la pieza entera.
+        private const float ShowThreshold = 0.02f;
         [SerializeField] private float fadeSpeed = 6f;
 
         private JointDriveController joint;
@@ -58,7 +60,8 @@ namespace Station.Visual
         {
             float err = Mathf.Abs(joint.Target - joint.Actual);
             if (joint.IsRevolute) err /= 100f;
-            float goal = err > showThreshold && body.xDrive.stiffness > 0f ? 1f : 0f;
+            // Opacidad proporcional a la diferencia: aparece despacio al separarse y se apaga al llegar
+            float goal = body.xDrive.stiffness > 0f ? Mathf.Clamp01((err - ShowThreshold) / ShowThreshold) : 0f;
             alpha = Mathf.MoveTowards(alpha, goal, fadeSpeed * Time.deltaTime);
             bool visible = alpha > 0.01f;
             if (ghostRoot.gameObject.activeSelf != visible) ghostRoot.gameObject.SetActive(visible);

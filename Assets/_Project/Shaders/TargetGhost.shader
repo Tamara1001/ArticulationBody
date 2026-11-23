@@ -19,6 +19,7 @@ Shader "Station/TargetGhost"
             Blend SrcAlpha OneMinusSrcAlpha
             ZWrite Off
             Cull Back
+            Offset 2, 2 // empuja el fantasma hacia atrás: donde coincide con la malla real, gana la real (sin z-fighting)
 
             HLSLPROGRAM
             #pragma vertex Vert
